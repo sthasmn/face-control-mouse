@@ -1,0 +1,8 @@
+opencv-python
+mediapipe
+tensorflow
+screeninfo
+pandas
+# For macOS mouse control
+pyobjc-core
+pyobjc-framework-quartz

@@ -1,0 +1,23 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Environments
+.env
+.venv
+env/
+venv/
+
+# Datasets
+*.csv
+*.npy
+
+# Keras / TensorFlow Models
+*.h5
+*.keras
