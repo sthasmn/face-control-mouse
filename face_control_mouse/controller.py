@@ -4,7 +4,6 @@ import numpy as np
 import tensorflow as tf
 from screeninfo import get_monitors
 
-# Import from our own module
 from . import utils
 from . import mouse_controller_macos as mouse
 
@@ -48,7 +47,6 @@ class FaceMouseController:
         self.last_click_time = 0
 
         # --- Landmark indices for eyes ---
-        # (These are the specific 6 landmarks for each eye used for EAR calculation)
         self.LEFT_EYE_LANDMARKS = [362, 385, 387, 263, 373, 380]
         self.RIGHT_EYE_LANDMARKS = [33, 160, 158, 133, 153, 144]
 
@@ -73,44 +71,44 @@ class FaceMouseController:
         # --- Gaze Prediction ---
         flattened_landmarks = landmarks_np.flatten()
 
-        # Update the input sequence
         self.input_data_sequence = np.roll(self.input_data_sequence, -1, axis=0)
         self.input_data_sequence[-1, :] = flattened_landmarks
 
-        # Reshape for the model and predict
         model_input = np.expand_dims(self.input_data_sequence, axis=0)
         predicted_norm = self._predict_gaze(model_input)[0]
 
-        # Denormalize and smooth the cursor position
-        screen_x = predicted_norm[0] * self.screen_width
-        screen_y = predicted_norm[1] * self.screen_height
-        screen_pos = self.smoother.smooth((screen_x, screen_y))
+        # --- COORDINATE TRANSFORMATION ---
+        # Denormalize the raw model output
+        raw_x = predicted_norm[0] * self.screen_width
+        raw_y = predicted_norm[1] * self.screen_height
+
+        # Invert the Y-axis to map from OpenCV coords (top-left origin)
+        # to macOS screen coords (bottom-left origin).
+        transformed_y = self.screen_height - raw_y
+
+        # Smooth the final transformed coordinates
+        screen_pos = self.smoother.smooth((raw_x, transformed_y))
 
         return screen_pos, landmarks_np
 
     def _detect_blinks(self, landmarks):
         """Detects left and right eye blinks."""
-        # Get coordinates for the 6 key landmarks of each eye
         left_eye_points = np.array([[landmarks[i][0], landmarks[i][1]] for i in self.LEFT_EYE_LANDMARKS])
         right_eye_points = np.array([[landmarks[i][0], landmarks[i][1]] for i in self.RIGHT_EYE_LANDMARKS])
 
-        # Calculate Eye Aspect Ratio (EAR)
         left_ear = utils.get_eye_aspect_ratio(left_eye_points)
         right_ear = utils.get_eye_aspect_ratio(right_eye_points)
 
-        # Use a threshold to determine if an eye is "closed"
         EAR_THRESHOLD = 0.2
         is_left_closed = left_ear < EAR_THRESHOLD
         is_right_closed = right_ear < EAR_THRESHOLD
 
-        # Update history
         self.left_eye_history.append(is_left_closed)
         self.right_eye_history.append(is_right_closed)
         if len(self.left_eye_history) > self.blink_frames_required:
             self.left_eye_history.pop(0)
             self.right_eye_history.pop(0)
 
-        # Check for consistent state over the last few frames
         left_blink = all(self.left_eye_history)
         right_blink = all(self.right_eye_history)
 
@@ -128,21 +126,18 @@ class FaceMouseController:
             if not success:
                 continue
 
-            # Flip the image horizontally for a later selfie-view display
-            image = cv2.flip(image, 1)
+            # --- FIX: REMOVED THE cv2.flip() FROM HERE ---
+            # Process the original, unflipped image
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
             # --- Core Logic ---
             screen_pos, landmarks = self._process_frame(image_rgb)
 
             if screen_pos and landmarks is not None:
-                # Move the mouse
                 self.mouse.move(screen_pos[0], screen_pos[1])
 
-                # Detect blinks
                 left_blink, right_blink = self._detect_blinks(landmarks)
 
-                # Check cooldown to prevent rapid-fire clicks
                 can_click = (cv2.getTickCount() - self.last_click_time) / cv2.getTickFrequency() > self.click_cooldown
 
                 if can_click:
@@ -155,9 +150,9 @@ class FaceMouseController:
                         self.mouse.right_click(screen_pos[0], screen_pos[1])
                         self.last_click_time = cv2.getTickCount()
 
-            # --- Visualization ---
-            # You can add drawing on the `image` frame here if you want a preview
-            cv2.imshow('Face Control Mouse - Preview (Press Q to quit)', image)
+            # For a mirrored preview, flip the image *after* all processing is done
+            preview_image = cv2.flip(image, 1)
+            cv2.imshow('Face Control Mouse - Preview (Press Q to quit)', preview_image)
 
             if cv2.waitKey(5) & 0xFF == ord('q'):
                 break

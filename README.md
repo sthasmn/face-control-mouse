@@ -67,11 +67,11 @@ This is a two-step process. You must train the model first.
 The model needs to be trained on your unique facial features and screen setup for the best accuracy.
 
 1.  **Collect Training Data:**
-    Run the data collection script from your terminal. It will open a full-screen window and show a moving dot. **Follow the dot with your eyes for the entire duration (default is 2 minutes).**
+    Run the data collection script from your terminal. It will open a full-screen window and show a moving dot. **Follow the dot with your head and eyes for the entire duration (default is 2 minutes).**
     ```bash
     python training/training_data_collection.py
     ```
-    This will create a `test_training_data.csv` file in your root directory.
+    This will create a `training_data.csv` file in your root directory.
 
 2.  **Train the Model:**
     Next, run the trainer script. This will load the `.csv` file, build the neural network, and start the training process.

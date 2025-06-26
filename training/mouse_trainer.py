@@ -1,30 +1,18 @@
 from screeninfo import get_monitors
-from utility import configuration as confg
-from Training.read_data import load_from_csv
+from read_data import load_from_csv
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout, BatchNormalization, Conv1D, MaxPooling1D, Flatten, LSTM
+from tensorflow.keras.layers import Dense, Dropout, BatchNormalization, Conv1D, MaxPooling1D, Flatten
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
-from tensorflow.keras.callbacks import EarlyStopping
-response = input("Do you want take new data? (y/n): ").strip().lower()
-if response == 'y':
-    print("Proceeding with the operation...")
-    import training_data_collection
-    # Add the code to proceed here
-elif response == 'n':
-    print("Model will be trained with old data.")
-else:
-    print("Invalid input. proceeding with old data.")
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 
-
+# Define training configuration here
+TIME_STEPS = 5
 print("model training will start shortly.")
 # Load the collected calibration data
+X, y = load_from_csv("training_data.csv", time_steps=TIME_STEPS)
 
-X, y = load_from_csv("test_training_data.csv")
-time_steps = confg.time_steps
-# X = data[:, :-2]  # Features: flattened landmarks
-# y = data[:, -2:]  # Targets: screen coordinates
 monitor = get_monitors()[0]
 # Extract the width and height
 screen_width = monitor.width
@@ -32,61 +20,67 @@ screen_height = monitor.height
 # Normalize screen points
 y = y / [screen_width, screen_height]
 
-# Define a simple neural network
+# --- MODEL ARCHITECTURE ---
+# Define the neural network with 'same' padding to prevent the dimension reduction error
 model = Sequential([
-    Conv1D(64, kernel_size=3, activation='relu', input_shape=(X.shape[1], 1)),
+    # The input shape should be (time_steps, num_features)
+    Conv1D(32, kernel_size=3, activation='relu', padding='same', input_shape=(X.shape[1], X.shape[2])),
     BatchNormalization(),
     MaxPooling1D(pool_size=2),
-    Dropout(0.5),
+    Dropout(0.1),
 
-    Conv1D(128, kernel_size=3, activation='relu'),
+    Conv1D(64, kernel_size=3, activation='relu', padding='same'), # Added padding='same'
     BatchNormalization(),
-    MaxPooling1D(pool_size=2),
+    MaxPooling1D(pool_size=2), # This is okay now because of the padding above
     Dropout(0.5),
-
-    # LSTM(64, activation='relu', input_shape=(time_steps, X.shape[2]), return_sequences=True),
-    # BatchNormalization(),
-    # Dropout(0.3),
-    #
-    # LSTM(128, activation='relu', return_sequences=False),
-    # BatchNormalization(),
-    # Dropout(0.3),
 
     Flatten(),
-    Dense(256, activation='relu'),
+    Dense(128, activation='relu'),
     BatchNormalization(),
     Dropout(0.5),
 
-    Dense(128, activation='relu'),
+    Dense(64, activation='relu'),
     BatchNormalization(),
-    #Dropout(0.3),
 
     Dense(2)  # Output layer for screen coordinates (x, y)
 ])
 
-# Compile and train the model
+# Compile the model
 model.compile(optimizer='adam', loss='mse', metrics=['mae'])
 
+# --- CALLBACKS ---
+# Stop training early if there is no improvement
 early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
 
-history = model.fit(X, y, epochs=50, batch_size=32, validation_split=0.2, callbacks=[early_stopping])
+# Save only the best model based on validation loss
+model_checkpoint = ModelCheckpoint(
+    filepath='model/my_model.keras',
+    monitor='val_loss',
+    save_best_only=True,
+    verbose=1
+)
 
-# Evaluate the model
+# Train the model
+history = model.fit(
+    X,
+    y,
+    epochs=50,
+    batch_size=32,
+    validation_split=0.2,
+    callbacks=[early_stopping, model_checkpoint]
+)
+
+# Evaluate the model (it will have the best weights restored by EarlyStopping)
 loss, mae = model.evaluate(X, y)
-print(f"Mean Absolute Error: {mae}")
-# Save the model for later use
-model.save('model/my_model.keras')
-print("\nModel saved to model/my_model.keras")
+print(f"Mean Absolute Error of the best model: {mae}")
+
+print("\nBest model saved to model/my_model.keras")
 
 
 def plot_training_history(history):
     """
     Plots the training and validation loss and MAE from a Keras history object.
-
-    Args:
-        history: A Keras History object returned from model.fit()
     """
-
     plt.figure(figsize=(12, 6))
 
     plt.subplot(1, 2, 1)

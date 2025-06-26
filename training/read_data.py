@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from utility import configuration as config
+
 
 # Prepare sequences
 def create_sequences(data, targets, time_steps):
@@ -12,31 +12,29 @@ def create_sequences(data, targets, time_steps):
     return np.array(X), np.array(y)
 
 
-def load_from_csv(csv_data_path):
-    # Load DataFrame from CSV
+def load_from_csv(csv_data_path, time_steps):
     df = pd.read_csv(csv_data_path)
 
-    # Reconstruct calibration data
-    calibration_data = []
     train_data = []
     target_data = []
+
+    # Dynamically find the number of landmarks from the column names
+    landmark_cols = [col for col in df.columns if 'landmark' in col]
+    num_landmarks = len(landmark_cols) // 3
+
     for _, row in df.iterrows():
-        # Extract flattened landmarks and reshape back to (468, 3)
+        # --- CORRECTED THIS PART ---
+        # Extract flattened landmarks directly, which is what the model expects.
+        # The .reshape() part was a bug I introduced, it has been removed.
         landmarks = np.array([
-            row[f'landmark_{i}_x'] for i in range(478)] +
-            [row[f'landmark_{i}_y'] for i in range(478)] +
-            [row[f'landmark_{i}_z'] for i in range(478)]
-        )#.reshape(478, 3)
-        # Extract screen coordinates
+                                 row[f'landmark_{i}_x'] for i in range(num_landmarks)] +
+                             [row[f'landmark_{i}_y'] for i in range(num_landmarks)] +
+                             [row[f'landmark_{i}_z'] for i in range(num_landmarks)]
+                             )
+
         screen_point = np.array((row['screen_x'], row['screen_y']))
         train_data.append(landmarks)
         target_data.append(screen_point)
-        #calibration_data.append((landmarks, screen_point))
-    time_steps = config.time_steps  # Example time_steps
+
     X, y = create_sequences(train_data, target_data, time_steps)
     return X, y
-
-# Use example
-# X, y = load_from_csv("training_data.csv")
-# print(X.shape)
-# print(y.shape)
